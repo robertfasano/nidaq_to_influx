@@ -1,0 +1,42 @@
+[daq]
+device = "Dev2"
+sample_rate = 1000.0 # Hz per channel
+chunk_size = 100 # samples per channel per read
+read_timeout = 10.0 # seconds
+buffer_chunks = 10
+queue_size = 1000 # completed cycles (statistics only)
+
+[trigger]
+terminal = "PFI0" # rising edges; resolved on the DAQ device, e.g. /Dev2/PFI0
+counter = "ctr0" # dedicated hardware counter, must be available
+
+[influx]
+url = "http://localhost:8086"
+org = "yblab"
+bucket = "Yb2"
+measurement = "daq_analog_input"
+timeout_ms = 10000
+# Authentication is read exclusively from the INFLUX_TOKEN environment variable.
+
+# Each entry combines the channel label and its reduction window.
+# start/stop are milliseconds after a rising edge: start inclusive, stop exclusive.
+# For a whole cycle of any length, set both start = "null" and stop = "null".
+# All channels initially use the whole cycle; set numeric times for fixed windows.
+# Only the listed inputs are acquired, in table order. Add or remove entries here
+# to change what the DAQ polls.
+[channels]
+ai0 = { label = "EOM Driver Monitor", start = "null", stop = "null" }
+ai1 = { label = "Sisy PD 4", start = "null", stop = "null" }
+ai2 = { label = "Incident PD", start = "null", stop = "null" }
+ai3 = { label = "Sisy PD 3", start = "null", stop = "null" }
+ai4 = { label = "Fiber PD", start = "null", stop = "null" }
+ai5 = { label = "Repumper PD", start = "null", stop = "null" }
+ai6 = { label = "Sisy PD 1", start = "null", stop = "null" }
+ai7 = { label = "578 PD", start = "null", stop = "null" }
+ai17 = { label = "Sisy PD 2", start = "null", stop = "null" }
+ai18 = { label = "Repumper Beat Note", start = "null", stop = "null" }
+ai19 = { label = "Transmission PD", start = "null", stop = "null" }
+ai20 = { label = "Sisy Attenuator", start = "null", stop = "null" }
+ai21 = { label = "Probe PD", start = "null", stop = "null" }
+ai22 = { label = "Reflection PD", start = "null", stop = "null" }
+ai23 = { label = "Liquid Crystal", start = "null", stop = "null" }

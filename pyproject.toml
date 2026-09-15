@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nidaq-to-influx"
+version = "0.2.0"
+description = "Continuously acquire NI-DAQ voltages and log trigger-cycle statistics to InfluxDB"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "nidaqmx>=0.9,<2",
+    "influxdb-client>=1.36,<2",
+    "tomli>=2; python_version < '3.11'",
+]
+
+[project.scripts]
+nidaq-to-influx = "nidaq_to_influx.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+nidaq_to_influx = ["default.toml"]

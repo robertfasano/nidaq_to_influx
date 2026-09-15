@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project exclusions
+*.py[cod]
+.venv/
+.ipynb_checkpoints/
+.DS_Store
