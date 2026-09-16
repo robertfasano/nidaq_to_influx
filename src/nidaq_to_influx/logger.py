@@ -70,6 +70,11 @@ def run_logger(config, token, stop_event=None):
                         edge=Edge.RISING, initial_count=0, count_direction=CountDirection.COUNT_UP,
                     )
                     channel.ci_count_edges_term = config.trigger_source
+                    if config.trigger_filter_min_pulse_width_us > 0:
+                        channel.ci_count_edges_dig_fltr_min_pulse_width = config.trigger_filter_min_pulse_width_us / 1_000_000
+                        channel.ci_count_edges_dig_fltr_enable = True
+                    else:
+                        channel.ci_count_edges_dig_fltr_enable = False
                     counter.timing.cfg_samp_clk_timing(
                         rate=actual_rate,
                         source=f"/{config.device}/ai/SampleClock",
@@ -91,6 +96,8 @@ def run_logger(config, token, stop_event=None):
                              len(config.channels), config.device, actual_rate,
                              config.trigger_source, config.trigger_counter)
                     log.info("Waiting for two trigger edges to publish the first cycle; press Ctrl+C to stop")
+                    log.info("Trigger lockout: %s ms; hardware minimum pulse width: %s us",
+                             config.trigger_min_interval_ms, config.trigger_filter_min_pulse_width_us)
                     while not stop_event.is_set():
                         chunk = analog.read(
                             number_of_samples_per_channel=config.chunk_size,
@@ -121,5 +128,8 @@ def run_logger(config, token, stop_event=None):
                 log.info("Stopped: %s cycles written, %s dropped, %s skipped, %s pending",
                          counts["written"], counts["dropped"],
                          cycles.cycles_skipped if cycles is not None else 0, pending.qsize())
+                if cycles is not None:
+                    log.info("Trigger diagnostics: %s ignored edges, %s extra edges merged between scans",
+                             cycles.edges_ignored, cycles.edges_merged)
             if failures:
                 raise RuntimeError("InfluxDB write failed; acquisition stopped") from failures[0]

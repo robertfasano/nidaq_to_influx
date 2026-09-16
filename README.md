@@ -67,6 +67,8 @@ Labels and reduction windows belong to the same channel entry:
 [trigger]
 terminal = "PFI0"
 counter = "ctr0"
+min_interval_ms = 300
+filter_min_pulse_width_us = 100
 
 [channels]
 ai0 = { label = "EOM Driver Monitor", start = 500, stop = 550 }
@@ -139,9 +141,45 @@ If a cycle ends before every configured window finishes, the entire cycle is
 skipped with a warning. A final cycle without a closing edge is also discarded,
 even if its windows have finished. A long pause between triggers does not grow
 the retained raw data, and does not cause a trigger-wait timeout: both tasks keep
-sampling. More than one edge between scans is ambiguous and stops acquisition
-with an error; use a faster sample rate or fix trigger noise. A normal 32-bit
-counter wrap is handled.
+sampling. A normal 32-bit counter wrap is handled; counter resets or backward
+or ambiguous large jumps stop acquisition with detailed diagnostics.
+
+### Trigger filtering and lockout
+
+The hardware counter's input filter defaults to a 100 microsecond minimum pulse
+width. Real trigger pulses must be comfortably longer than this (for example,
+1 ms). The filter rejects short glitches and introduces a small edge-recognition
+delay. Set `filter_min_pulse_width_us = 0` to disable it. Unsupported hardware
+filter settings fail during task setup rather than silently disabling protection.
+
+After accepting an edge, the reducer ignores all further edges for 300 ms by
+default. Spacing uses hardware sample indices, independently of processing or
+InfluxDB latency. Ignored edges update the observed count but do not extend the
+lockout, close the cycle, or interrupt its statistics. An edge exactly at the
+minimum interval is accepted. Set `min_interval_ms = 0` to disable the lockout.
+
+Multiple forward counts between two scans are treated as one candidate edge.
+Outside the lockout they produce a single cycle boundary with a warning; inside
+the lockout they are ignored. Their individual times cannot be reconstructed at
+the configured sampling rate. This assumes that closely spaced edges are bounce,
+as expected for cycles lasting 500–1000 ms. A spurious edge after the lockout can
+still be mistaken for a cycle boundary. Shutdown reports ignored and merged counts;
+`--log-level DEBUG` also shows ignored-edge details.
+
+## Install the prebuilt wheel on the lab machine
+
+The repository includes a platform-independent wheel to bypass source metadata
+generation on Windows. From the repository folder after `git pull`, run:
+
+```bat
+python -m pip install --upgrade prebuilt/nidaq_to_influx-0.3.0-py3-none-any.whl
+nidaq-to-influx --check-config
+```
+
+Python dependencies still install normally, and the NI-DAQmx driver is required.
+Existing config files inherit the new trigger defaults unless overridden. If the
+trigger pulses are shorter than 100 microseconds, reduce or disable the hardware
+filter before starting acquisition.
 
 ### Timing and hardware limits
 

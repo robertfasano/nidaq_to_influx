@@ -6,10 +6,38 @@ from nidaq_to_influx.cycles import CycleReducer
 
 
 def config_for_window(start=0, stop=2):
-    return replace(load_config(), channel_settings={"ai0": {"label": "Monitor", "start": start, "stop": stop}})
+    return replace(load_config(), trigger_min_interval_ms=0, channel_settings={"ai0": {"label": "Monitor", "start": start, "stop": stop}})
 
 
 class CycleTests(unittest.TestCase):
+    def test_lockout_does_not_extend_and_preserves_whole_cycle_data(self):
+        for size in (1, 17, 100, 301):
+            config = replace(config_for_window(None, None), trigger_min_interval_ms=300)
+            cycles = CycleReducer(config)
+            values = list(range(601))
+            # Bounce immediately after the first edge and again at 299 ms.
+            counts = [1] + [3]*298 + [4] + [5]*300 + [6]
+            result = []
+            for start in range(0, len(values), size):
+                result.extend(cycles.add(values[start:start+size], counts[start:start+size]))
+            self.assertEqual([start for start, _ in result], [0, 300])
+            self.assertEqual([r["ai0"]["mean"] for _, r in result], [149.5, 449.5])
+            self.assertEqual(cycles.edges_ignored, 3)
+            self.assertEqual(cycles.last_count, 6)
+
+    def test_forward_jumps_merge_at_accepted_boundary(self):
+        cycles = CycleReducer(config_for_window(None, None))
+        with self.assertLogs("nidaq_to_influx.cycles", level="WARNING"):
+            result = cycles.add([2, 4, 10], [2, 2, 5])
+        self.assertEqual(result[0][1]["ai0"]["mean"], 3)
+        self.assertEqual(cycles.edges_merged, 3)
+
+    def test_fractional_lockout_rounds_up_to_next_scan(self):
+        cycles = CycleReducer(replace(config_for_window(None, None), trigger_min_interval_ms=2.1))
+        result = cycles.add([1, 2, 3, 10], [1, 1, 2, 3])
+        self.assertEqual(result[0][1]["ai0"]["mean"], 2)
+        self.assertEqual(cycles.edges_ignored, 1)
+
     def test_whole_cycles_of_different_lengths_across_read_partitions(self):
         values = [99, 2, 4, 6, 10, 20, 5, 100]
         counts = [0, 1, 1, 1, 2, 2, 3, 4]
@@ -25,7 +53,7 @@ class CycleTests(unittest.TestCase):
             self.assertEqual(cycles.cycles_completed, 3)
 
     def test_mixed_whole_cycle_and_fixed_windows(self):
-        config = replace(load_config(), channel_settings={
+        config = replace(load_config(), trigger_min_interval_ms=0, channel_settings={
             "ai0": {"label": "Whole", "start": None, "stop": None},
             "ai1": {"label": "Fixed", "start": 1, "stop": 3}})
         cycles = CycleReducer(config)
@@ -87,13 +115,20 @@ class CycleTests(unittest.TestCase):
         self.assertEqual(result[0][1]["ai0"]["mean"], 3)
 
     def test_multiple_edges_between_scans_and_invalid_counts_fail(self):
-        for counts in ([0, 2], [0, -1], [0, 1.5], [0, float("nan")], [0, 2**32]):
+        for counts in ([0, -1], [0, 1.5], [0, float("nan")], [0, 2**32]):
             cycles = CycleReducer(config_for_window())
             with self.assertRaises(ValueError):
                 cycles.add([2, 4], counts)
         cycles = CycleReducer(config_for_window())
         with self.assertRaisesRegex(ValueError, "matching"):
             cycles.add([2], [0, 1])
+
+    def test_counter_jump_reports_values_and_position_across_reads(self):
+        cycles = CycleReducer(config_for_window())
+        cycles.add([2, 4], [0, 2])
+        with self.assertRaisesRegex(ValueError,
+                                    r"previous=2, current=1, delta=4294967295, sample_index=3, chunk_offset=1"):
+            cycles.add([6, 8], [2, 1])
 
     def test_results_independent_of_read_chunking(self):
         # Several variable-length cycles, including a short one, across all read partitions.

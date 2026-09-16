@@ -2,6 +2,7 @@
 
 import logging
 from numbers import Real
+from decimal import Decimal, ROUND_CEILING
 
 from .reduction import WindowReducer
 
@@ -25,6 +26,11 @@ class CycleReducer:
         self.reducer = None
         self.cycles_completed = 0
         self.cycles_skipped = 0
+        self.min_interval_samples = int((Decimal(str(config.trigger_min_interval_ms))
+                                        * Decimal(str(config.sample_rate)) / 1000)
+                                       .to_integral_value(rounding=ROUND_CEILING))
+        self.edges_ignored = 0
+        self.edges_merged = 0
 
     def _feed(self, chunk, start, stop):
         if start == stop or self.reducer is None or self.reducer.complete:
@@ -49,8 +55,29 @@ class CycleReducer:
             delta = (count - self.last_count) % (2**32)
             if delta == 0:
                 continue
-            if delta != 1:
-                raise ValueError("Multiple trigger edges between analog scans; increase sample_rate or check trigger noise")
+            # Half-range comparison distinguishes a small forward jump (including
+            # normal 32-bit wrap) from a reset/backward count. Ambiguous jumps fail.
+            if delta >= 2**31:
+                absolute_index = self.samples_seen + index
+                raise ValueError(
+                    "Trigger counter reset or backward/ambiguous jump: "
+                    f"previous={self.last_count}, current={count}, delta={delta}, "
+                    f"sample_index={absolute_index}, chunk_offset={index}, "
+                    f"scan_interval_ms={1000 / self.config.sample_rate:.6g}, "
+                    f"source={self.config.trigger_source}, counter={self.config.trigger_counter}. "
+                    "Check trigger signal quality and counter routing; "
+                    "buffered reads are independent of InfluxDB write latency."
+                )
+            self.last_count = count # Always track observed edges, including ignored ones.
+            absolute_index = self.samples_seen + index
+            if self.cycle_start is not None and absolute_index - self.cycle_start < self.min_interval_samples:
+                self.edges_ignored += delta
+                log.debug("Ignored %s trigger edges at sample %s during lockout", delta, absolute_index)
+                continue
+            if delta > 1:
+                self.edges_merged += delta - 1
+                log.warning("Merged %s trigger edges into one boundary at sample %s; source=%s",
+                            delta, absolute_index, self.config.trigger_source)
             self._feed(chunk, segment_start, index)
             if self.reducer is not None:
                 self.reducer.close()
@@ -64,7 +91,6 @@ class CycleReducer:
                                 self.cycle_start, duration_ms)
             self.cycle_start = self.samples_seen + index
             self.reducer = WindowReducer(self.config.channels, self.windows, self.config.sample_rate)
-            self.last_count = count
             segment_start = index
         self._feed(chunk, segment_start, size)
         self.samples_seen += size

@@ -9,6 +9,8 @@ queue_size = 1000 # completed cycles (statistics only)
 [trigger]
 terminal = "PFI0" # rising edges; resolved on the DAQ device, e.g. /Dev2/PFI0
 counter = "ctr0" # dedicated hardware counter, must be available
+min_interval_ms = 300 # lockout after each accepted edge; ignored edges do not extend it
+filter_min_pulse_width_us = 100 # hardware glitch filter; 0 disables; real pulses must be longer
 
 [influx]
 url = "http://localhost:8086"

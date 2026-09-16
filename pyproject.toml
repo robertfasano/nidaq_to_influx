@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nidaq-to-influx"
-version = "0.2.0"
+version = "0.3.0"
 description = "Continuously acquire NI-DAQ voltages and log trigger-cycle statistics to InfluxDB"
 readme = "README.md"
 requires-python = ">=3.9"

@@ -34,6 +34,8 @@ class Config:
     channel_settings: dict
     trigger_terminal: str
     trigger_counter: str
+    trigger_min_interval_ms: float
+    trigger_filter_min_pulse_width_us: float
 
     @property
     def channels(self):
@@ -65,7 +67,9 @@ def load_config(path=None):
                 data[section].update(values)
     config = Config(**data["daq"], **data["influx"], channel_settings=data["channels"],
                     trigger_terminal=data["trigger"]["terminal"],
-                    trigger_counter=data["trigger"]["counter"])
+                    trigger_counter=data["trigger"]["counter"],
+                    trigger_min_interval_ms=data["trigger"]["min_interval_ms"],
+                    trigger_filter_min_pulse_width_us=data["trigger"]["filter_min_pulse_width_us"])
     for name in ("device", "url", "org", "bucket", "measurement"):
         value = getattr(config, name)
         if not isinstance(value, str) or not value.strip():
@@ -79,6 +83,10 @@ def load_config(path=None):
         if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
             raise ValueError(f"{name} must be a positive finite number")
     terminal = config.trigger_terminal
+    for name in ("trigger_min_interval_ms", "trigger_filter_min_pulse_width_us"):
+        value = getattr(config, name)
+        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            raise ValueError(f"{name} must be a nonnegative finite number (0 disables it)")
     terminal_pattern = rf"(?:/{re.escape(config.device)}/)?PFI(?:[0-9]|1[0-5])"
     if not isinstance(terminal, str) or not re.fullmatch(terminal_pattern, terminal):
         raise ValueError("trigger.terminal must be PFI0–PFI15, optionally prefixed with /device/")

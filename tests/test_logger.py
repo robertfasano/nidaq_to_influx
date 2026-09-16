@@ -73,7 +73,7 @@ class LoggerTests(unittest.TestCase):
         config = load_config()
         if single_channel:
             config = replace(config, channel_settings={"ai17": config.channel_settings["ai17"]})
-        config = replace(config, channel_settings={ch: {**entry, "start": 1, "stop": 3} for ch, entry in config.channel_settings.items()}, chunk_size=4)
+        config = replace(config, trigger_min_interval_ms=0, channel_settings={ch: {**entry, "start": 1, "stop": 3} for ch, entry in config.channel_settings.items()}, chunk_size=4)
         order = []
         counter.start.side_effect = lambda: order.append("counter")
         analog.start.side_effect = lambda: order.append("analog")
@@ -151,6 +151,8 @@ class LoggerTests(unittest.TestCase):
         counter.__exit__.assert_called_once()
         channel = counter.ci_channels.add_ci_count_edges_chan.return_value
         self.assertEqual(channel.ci_count_edges_term, "/Dev2/PFI0")
+        self.assertTrue(channel.ci_count_edges_dig_fltr_enable)
+        self.assertAlmostEqual(channel.ci_count_edges_dig_fltr_min_pulse_width, 0.0001)
         timing = counter.timing.cfg_samp_clk_timing.call_args.kwargs
         self.assertEqual(timing["source"], "/Dev2/ai/SampleClock")
         self.assertEqual(timing["rate"], actual_rate)
